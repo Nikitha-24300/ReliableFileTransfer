@@ -33,3 +33,29 @@ def receive_message(sock):
     message_data = receive_exact(sock, message_length)
 
     return message_data.decode("utf-8")
+
+def send_file(sock, file_path, file_size):
+    with open(file_path, "rb") as file:
+        remaining = file_size
+
+        while remaining > 0:
+            chunk = file.read(min(4096, remaining))
+
+            if not chunk:
+                raise IOError("File ended before expected size.")
+
+            sock.sendall(chunk)
+            remaining -= len(chunk)
+
+
+def receive_file(sock, file_path, file_size):
+    remaining = file_size
+
+    with open(file_path, "wb") as file:
+        while remaining > 0:
+            chunk_size = min(4096, remaining)
+
+            chunk = receive_exact(sock, chunk_size)
+
+            file.write(chunk)
+            remaining -= len(chunk)

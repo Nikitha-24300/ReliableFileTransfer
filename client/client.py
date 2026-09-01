@@ -1,7 +1,13 @@
 import socket
+import os
 
+from shared.network import (
+    send_message,
+    receive_message,
+    send_file
+)
 from shared.config import SERVER_HOST, SERVER_PORT
-from shared.network import send_message, receive_message
+
 from shared.protocol import (
     HELLO,
     HELLO_ACK,
@@ -11,7 +17,10 @@ from shared.protocol import (
     DELETE,
     EXIT,
     GOODBYE,
-    ERROR
+    ERROR,
+    UPLOAD_READY,
+    UPLOAD_REJECTED,
+    TRANSFER_COMPLETE
 )
 
 
@@ -67,8 +76,49 @@ def start_client():
                 print("LIST request sent.")
 
             elif choice == "2":
+                file_path = input("Enter the path of the file to upload: ").strip()
+
+                if not os.path.isfile(file_path):
+                    print("File does not exist.")
+                    continue
+
+                filename = os.path.basename(file_path)
+                file_size = os.path.getsize(file_path)
+
                 send_message(client_socket, UPLOAD)
-                print("UPLOAD request sent.")
+
+                metadata = f"{filename}|{file_size}"
+
+                send_message(
+        client_socket,
+        metadata
+    )
+
+                response = receive_message(client_socket)
+
+                if response == UPLOAD_REJECTED:
+                    print("Server rejected the upload.")
+                    continue
+
+                if response != UPLOAD_READY:
+                    print("Unexpected server response.")
+                    continue
+
+                print(f"Uploading {filename}...")
+                print(f"File size: {file_size} bytes")
+
+                send_file(
+        client_socket,
+        file_path,
+        file_size
+    )
+
+                response = receive_message(client_socket)
+
+                if response == TRANSFER_COMPLETE:
+                    print("File transferred successfully.")
+                else:
+                    print("File transfer failed.")
 
             elif choice == "3":
                 send_message(client_socket, DOWNLOAD)
@@ -91,25 +141,29 @@ def start_client():
             else:
                 print("Invalid choice. Please select 1-5.")
 
-            response = receive_message(client_socket)
+            if choice != "2":
+                response = receive_message(client_socket)
 
-            if response == ERROR:
-                print("Server reported an error.")
+                if response == ERROR:
+                    print("Server reported an error.")
 
-            elif response == "FILE_LIST_EMPTY":
-                print()
-                print("No files available on the server.")
+                elif response == "FILE_LIST_EMPTY":
+                    print()
+                    print("No files available on the server.")
 
-            elif response.startswith("FILE_LIST\n"):
-                print()
-                print("========== AVAILABLE FILES ==========")
+                elif response.startswith("FILE_LIST\n"):
+                    print()
+                    print("========== AVAILABLE FILES ==========")
 
-                file_data = response[len("FILE_LIST\n"):]
+                    file_data = response[len("FILE_LIST\n"):]
 
-                for index, filename in enumerate(file_data.split("\n"), start=1):
-                    print(f"{index}. {filename}")
+                    for index, filename in enumerate(
+                        file_data.split("\n"),
+                        start=1
+                    ):
+                        print(f"{index}. {filename}")
 
-                print("=====================================")
+                    print("=====================================")
 
     except ConnectionRefusedError:
         print("Connection failed.")

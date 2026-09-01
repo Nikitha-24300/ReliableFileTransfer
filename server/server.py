@@ -1,7 +1,12 @@
 import socket
 
 from shared.config import SERVER_HOST, SERVER_PORT
-from shared.network import send_message, receive_message
+from shared.network import (
+    send_message,
+    receive_message,
+    receive_file
+)
+
 from shared.protocol import (
     HELLO,
     HELLO_ACK,
@@ -11,9 +16,16 @@ from shared.protocol import (
     DELETE,
     EXIT,
     GOODBYE,
-    ERROR
+    ERROR,
+    UPLOAD_READY,
+    UPLOAD_REJECTED,
+    TRANSFER_COMPLETE
 )
-from server.file_manager import list_files
+
+from server.file_manager import (
+    list_files,
+    get_storage_path
+)
 
 
 def handle_client(client_socket, client_address):
@@ -49,7 +61,41 @@ def handle_client(client_socket, client_address):
 
             elif command == UPLOAD:
                 print("UPLOAD request received.")
-                send_message(client_socket, "UPLOAD_ACK")
+
+                metadata = receive_message(client_socket)
+
+                parts = metadata.split("|")
+
+                if len(parts) != 2:
+                    send_message(client_socket, UPLOAD_REJECTED)
+                    continue
+
+                filename = parts[0]
+                file_size = int(parts[1])
+
+                print(f"Upload filename: {filename}")
+                print(f"Upload size: {file_size} bytes")
+
+                if not filename:
+                    send_message(client_socket, UPLOAD_REJECTED)
+                    continue
+
+                send_message(client_socket, UPLOAD_READY)
+
+                temp_path = get_storage_path(filename + ".tmp")
+
+                receive_file(
+                    client_socket,
+                    temp_path,
+                    file_size
+                )
+
+                print(f"Temporary file received: {temp_path}")
+
+                send_message(
+                    client_socket,
+                    TRANSFER_COMPLETE
+                )
 
             elif command == DOWNLOAD:
                 print("DOWNLOAD request received.")
