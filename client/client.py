@@ -1,6 +1,8 @@
 import socket
 
 from shared.config import SERVER_HOST, SERVER_PORT
+from shared.network import send_message, receive_message
+from shared.protocol import HELLO, HELLO_ACK
 
 
 def start_client():
@@ -16,14 +18,27 @@ def start_client():
     print(f"Connecting to {SERVER_HOST}:{SERVER_PORT}...")
 
     try:
-        client_socket.connect((SERVER_HOST, SERVER_PORT))
+        client_socket.connect(
+            (SERVER_HOST, SERVER_PORT)
+        )
 
         print("Connected to server successfully.")
-        print(f"Server address: {SERVER_HOST}:{SERVER_PORT}")
+
+        send_message(client_socket, HELLO)
+        print("Sent: HELLO")
+
+        response = receive_message(client_socket)
+        print(f"Received: {response}")
+
+        if response == HELLO_ACK:
+            print("Server handshake successful.")
 
     except ConnectionRefusedError:
         print("Connection failed.")
         print("Make sure the server is running.")
+
+    except ConnectionError as error:
+        print(f"Connection error: {error}")
 
     finally:
         client_socket.close()
