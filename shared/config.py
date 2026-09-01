@@ -1,0 +1,10 @@
+SERVER_HOST = "127.0.0.1"
+SERVER_PORT = 5000
+
+BUFFER_SIZE = 4096
+
+STORAGE_DIR = "server/storage"
+DOWNLOAD_DIR = "client/downloads"
+
+TEMP_FILE_SUFFIX = ".tmp"
+DOWNLOAD_TEMP_SUFFIX = ".download"
