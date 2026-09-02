@@ -25,10 +25,13 @@ from shared.protocol import (
     DOWNLOAD_REJECTED,
     DOWNLOAD_COMPLETE,
     DOWNLOAD_INTEGRITY_OK,
+    DOWNLOAD_INTEGRITY_FAILED,
     TRANSFER_COMPLETE,
     INTEGRITY_OK,
     INTEGRITY_FAILED,
-    UPLOAD_SUCCESS
+    UPLOAD_SUCCESS,
+    DELETE_SUCCESS,
+    DELETE_FAILED
 )
 
 from server.file_manager import (
@@ -49,6 +52,57 @@ def get_file_lock(filename):
             file_locks[filename] = threading.Lock()
 
         return file_locks[filename]
+
+
+def cleanup_stale_temp_files():
+    print("Checking for stale temporary files...")
+
+    storage_dir = os.path.dirname(
+        get_storage_path("dummy")
+    )
+
+    if not os.path.exists(storage_dir):
+        print("Storage directory does not exist.")
+        return
+
+    cleaned_count = 0
+
+    for filename in os.listdir(storage_dir):
+        if not filename.endswith(".tmp"):
+            continue
+
+        file_path = os.path.join(
+            storage_dir,
+            filename
+        )
+
+        if not os.path.isfile(file_path):
+            continue
+
+        try:
+            os.remove(file_path)
+
+            cleaned_count += 1
+
+            print(
+                f"Removed stale temporary file: "
+                f"{filename}"
+            )
+
+        except OSError as error:
+            print(
+                f"Could not remove temporary file "
+                f"{filename}: {error}"
+            )
+
+    if cleaned_count == 0:
+        print("No stale temporary files found.")
+
+    else:
+        print(
+            f"Cleaned up {cleaned_count} "
+            f"stale temporary file(s)."
+        )
 
 
 def handle_client(client_socket, client_address):
@@ -182,11 +236,6 @@ def handle_client(client_socket, client_address):
                         f"Lock acquired: {filename}"
                     )
 
-                    send_message(
-                        client_socket,
-                        UPLOAD_READY
-                    )
-
                     temp_path = get_storage_path(
                         filename + ".tmp"
                     )
@@ -195,78 +244,119 @@ def handle_client(client_socket, client_address):
                         filename
                     )
 
-                    receive_file(
-                        client_socket,
-                        temp_path,
-                        file_size
-                    )
+                    upload_completed = False
 
-                    print(
-                        f"[{client_address}] "
-                        f"Temporary file received."
-                    )
-
-                    send_message(
-                        client_socket,
-                        TRANSFER_COMPLETE
-                    )
-
-                    expected_hash = receive_message(
-                        client_socket
-                    )
-
-                    received_hash = calculate_sha256(
-                        temp_path
-                    )
-
-                    print(
-                        f"[{client_address}] "
-                        f"Client SHA-256: "
-                        f"{expected_hash}"
-                    )
-
-                    print(
-                        f"[{client_address}] "
-                        f"Server SHA-256: "
-                        f"{received_hash}"
-                    )
-
-                    if expected_hash == received_hash:
+                    try:
                         send_message(
                             client_socket,
-                            INTEGRITY_OK
+                            UPLOAD_READY
                         )
 
-                        atomic_replace(
+                        receive_file(
+                            client_socket,
                             temp_path,
-                            final_path
-                        )
-
-                        send_message(
-                            client_socket,
-                            UPLOAD_SUCCESS
+                            file_size
                         )
 
                         print(
                             f"[{client_address}] "
-                            f"Upload completed: "
-                            f"{filename}"
+                            f"Temporary file received."
                         )
 
-                    else:
                         send_message(
                             client_socket,
-                            INTEGRITY_FAILED
+                            TRANSFER_COMPLETE
                         )
 
-                        if os.path.exists(temp_path):
-                            os.remove(temp_path)
+                        expected_hash = receive_message(
+                            client_socket
+                        )
+
+                        received_hash = calculate_sha256(
+                            temp_path
+                        )
 
                         print(
                             f"[{client_address}] "
-                            f"Integrity verification failed: "
-                            f"{filename}"
+                            f"Client SHA-256: "
+                            f"{expected_hash}"
                         )
+
+                        print(
+                            f"[{client_address}] "
+                            f"Server SHA-256: "
+                            f"{received_hash}"
+                        )
+
+                        if expected_hash == received_hash:
+                            send_message(
+                                client_socket,
+                                INTEGRITY_OK
+                            )
+
+                            atomic_replace(
+                                temp_path,
+                                final_path
+                            )
+
+                            upload_completed = True
+
+                            send_message(
+                                client_socket,
+                                UPLOAD_SUCCESS
+                            )
+
+                            print(
+                                f"[{client_address}] "
+                                f"Upload completed: "
+                                f"{filename}"
+                            )
+
+                        else:
+                            send_message(
+                                client_socket,
+                                INTEGRITY_FAILED
+                            )
+
+                            print(
+                                f"[{client_address}] "
+                                f"Integrity verification failed: "
+                                f"{filename}"
+                            )
+
+                    except Exception as error:
+                        print(
+                            f"[{client_address}] "
+                            f"Upload failed: {filename}"
+                        )
+
+                        print(
+                            f"[{client_address}] "
+                            f"Reason: {error}"
+                        )
+
+                        raise
+
+                    finally:
+                        if (
+                            not upload_completed
+                            and os.path.exists(temp_path)
+                        ):
+                            try:
+                                os.remove(temp_path)
+
+                                print(
+                                    f"[{client_address}] "
+                                    f"Temporary file cleaned up: "
+                                    f"{filename}.tmp"
+                                )
+
+                            except OSError as cleanup_error:
+                                print(
+                                    f"[{client_address}] "
+                                    f"Could not remove temporary file: "
+                                    f"{cleanup_error}"
+                                )
 
                     print(
                         f"[{client_address}] "
@@ -413,10 +503,76 @@ def handle_client(client_socket, client_address):
                     f"DELETE request received."
                 )
 
-                send_message(
-                    client_socket,
-                    "DELETE_ACK"
+                filename = receive_message(
+                    client_socket
                 )
+
+                if not filename:
+                    send_message(
+                        client_socket,
+                        DELETE_FAILED
+                    )
+                    continue
+
+                if (
+                    os.path.basename(filename)
+                    != filename
+                ):
+                    send_message(
+                        client_socket,
+                        DELETE_FAILED
+                    )
+                    continue
+
+                file_path = get_storage_path(
+                    filename
+                )
+
+                file_lock = get_file_lock(filename)
+
+                print(
+                    f"[{client_address}] "
+                    f"Waiting for delete lock: "
+                    f"{filename}"
+                )
+
+                with file_lock:
+                    print(
+                        f"[{client_address}] "
+                        f"Delete lock acquired: "
+                        f"{filename}"
+                    )
+
+                    if os.path.isfile(file_path):
+                        os.remove(file_path)
+
+                        send_message(
+                            client_socket,
+                            DELETE_SUCCESS
+                        )
+
+                        print(
+                            f"[{client_address}] "
+                            f"File deleted: {filename}"
+                        )
+
+                    else:
+                        send_message(
+                            client_socket,
+                            DELETE_FAILED
+                        )
+
+                        print(
+                            f"[{client_address}] "
+                            f"File not found for deletion: "
+                            f"{filename}"
+                        )
+
+                    print(
+                        f"[{client_address}] "
+                        f"Delete lock released: "
+                        f"{filename}"
+                    )
 
             elif command == EXIT:
                 send_message(
@@ -464,6 +620,8 @@ def handle_client(client_socket, client_address):
 
 
 def start_server():
+    cleanup_stale_temp_files()
+
     server_socket = socket.socket(
         socket.AF_INET,
         socket.SOCK_STREAM
@@ -489,6 +647,7 @@ def start_server():
     print("Status      : Running")
     print("Mode        : Multi-Client")
     print("Locking     : Per-File")
+    print("Temp Cleanup: Enabled")
     print("Waiting for clients...")
     print("=" * 50)
 
