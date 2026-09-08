@@ -1,5 +1,6 @@
 import hashlib
 import os
+import re
 
 from shared.config import STORAGE_DIR
 
@@ -50,3 +51,48 @@ def atomic_replace(temp_path, final_path):
         temp_path,
         final_path
     )
+
+
+def is_valid_filename(filename):
+    if not filename:
+        return False
+
+    if len(filename) > 255:
+        return False
+
+    if os.path.basename(filename) != filename:
+        return False
+
+    if filename in (".", ".."):
+        return False
+
+    invalid_characters = '<>:"/\\|?*'
+
+    for character in invalid_characters:
+        if character in filename:
+            return False
+
+    if any(
+        ord(character) < 32
+        for character in filename
+    ):
+        return False
+
+    if filename.endswith(" ") or filename.endswith("."):
+        return False
+
+    return True
+
+
+def is_valid_file_size(file_size):
+    return file_size >= 0
+
+
+def is_valid_sha256(file_hash):
+    if not isinstance(file_hash, str):
+        return False
+
+    return re.fullmatch(
+        r"[0-9a-fA-F]{64}",
+        file_hash
+    ) is not None
