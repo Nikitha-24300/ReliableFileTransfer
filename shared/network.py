@@ -39,7 +39,14 @@ def receive_message(sock):
     return message_data.decode("utf-8")
 
 
-def send_file(sock, file_path, file_size):
+def send_file(
+    sock,
+    file_path,
+    file_size,
+    progress_callback=None
+):
+    transferred = 0
+
     with open(file_path, "rb") as file:
         remaining = file_size
 
@@ -55,11 +62,24 @@ def send_file(sock, file_path, file_size):
 
             sock.sendall(chunk)
 
+            transferred += len(chunk)
             remaining -= len(chunk)
 
+            if progress_callback is not None:
+                progress_callback(
+                    transferred,
+                    file_size
+                )
 
-def receive_file(sock, file_path, file_size):
+
+def receive_file(
+    sock,
+    file_path,
+    file_size,
+    progress_callback=None
+):
     remaining = file_size
+    transferred = 0
 
     with open(file_path, "wb") as file:
         while remaining > 0:
@@ -75,4 +95,11 @@ def receive_file(sock, file_path, file_size):
 
             file.write(chunk)
 
+            transferred += len(chunk)
             remaining -= len(chunk)
+
+            if progress_callback is not None:
+                progress_callback(
+                    transferred,
+                    file_size
+                )

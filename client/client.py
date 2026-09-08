@@ -50,6 +50,32 @@ def calculate_sha256(file_path):
     return sha256.hexdigest()
 
 
+def display_progress(transferred, total):
+    if total <= 0:
+        percentage = 100
+    else:
+        percentage = (transferred / total) * 100
+
+    bar_length = 30
+
+    filled_length = int(
+        bar_length * transferred / total
+    ) if total > 0 else bar_length
+
+    progress_bar = (
+        "=" * filled_length
+        + " " * (bar_length - filled_length)
+    )
+
+    print(
+        f"\r[{progress_bar}] "
+        f"{percentage:6.2f}% "
+        f"({transferred} / {total} bytes)",
+        end="",
+        flush=True
+    )
+
+
 def display_menu():
     print()
     print("=" * 45)
@@ -259,9 +285,11 @@ def start_client():
                     send_file(
                         client_socket,
                         file_path,
-                        file_size
+                        file_size,
+                        progress_callback=display_progress
                     )
 
+                    print()
                     print(
                         "File data sent successfully."
                     )
@@ -454,9 +482,11 @@ def start_client():
                         receive_file(
                             client_socket,
                             temp_download_path,
-                            file_size
+                            file_size,
+                            progress_callback=display_progress
                         )
 
+                        print()
                         print(
                             "File data received successfully."
                         )
