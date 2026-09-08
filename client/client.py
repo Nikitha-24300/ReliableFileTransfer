@@ -29,7 +29,9 @@ from shared.protocol import (
     DOWNLOAD_REJECTED,
     DOWNLOAD_COMPLETE,
     DOWNLOAD_INTEGRITY_OK,
-    DOWNLOAD_INTEGRITY_FAILED
+    DOWNLOAD_INTEGRITY_FAILED,
+    DELETE_SUCCESS,
+    DELETE_FAILED
 )
 
 
@@ -354,6 +356,10 @@ def start_client():
                     filename
                 )
 
+                temp_download_path = (
+                    download_path + ".tmp"
+                )
+
                 print()
                 print(
                     f"Downloading: {filename}"
@@ -367,80 +373,142 @@ def start_client():
                     f"Server SHA-256: {expected_hash}"
                 )
 
-                receive_file(
-                    client_socket,
-                    download_path,
-                    file_size
-                )
+                download_completed = False
 
-                response = receive_message(
-                    client_socket
-                )
+                try:
+                    receive_file(
+                        client_socket,
+                        temp_download_path,
+                        file_size
+                    )
 
-                if response != DOWNLOAD_COMPLETE:
+                    response = receive_message(
+                        client_socket
+                    )
+
+                    if response != DOWNLOAD_COMPLETE:
+                        print(
+                            "Download was not completed."
+                        )
+                        continue
+
+                    received_hash = calculate_sha256(
+                        temp_download_path
+                    )
+
                     print(
-                        "Download was not completed."
+                        f"Downloaded SHA-256: "
+                        f"{received_hash}"
+                    )
+
+                    if expected_hash == received_hash:
+                        send_message(
+                            client_socket,
+                            DOWNLOAD_INTEGRITY_OK
+                        )
+
+                        os.replace(
+                            temp_download_path,
+                            download_path
+                        )
+
+                        download_completed = True
+
+                        print(
+                            "SHA-256 verification: PASSED"
+                        )
+
+                        print(
+                            "Download completed successfully."
+                        )
+
+                        print(
+                            f"Saved to: {download_path}"
+                        )
+
+                    else:
+                        send_message(
+                            client_socket,
+                            DOWNLOAD_INTEGRITY_FAILED
+                        )
+
+                        print(
+                            "SHA-256 verification: FAILED"
+                        )
+
+                        print(
+                            "Downloaded file may be corrupted."
+                        )
+
+                except Exception as error:
+                    print(
+                        f"Download failed: {error}"
+                    )
+
+                finally:
+                    if (
+                        not download_completed
+                        and os.path.exists(
+                            temp_download_path
+                        )
+                    ):
+                        try:
+                            os.remove(
+                                temp_download_path
+                            )
+
+                            print(
+                                "Temporary download "
+                                "file cleaned up."
+                            )
+
+                        except OSError as cleanup_error:
+                            print(
+                                f"Could not remove temporary "
+                                f"download file: "
+                                f"{cleanup_error}"
+                            )
+
+            elif choice == "4":
+                filename = input(
+                    "Enter the filename to delete: "
+                ).strip()
+
+                if not filename:
+                    print(
+                        "Filename cannot be empty."
                     )
                     continue
 
-                received_hash = calculate_sha256(
-                    download_path
-                )
-
-                print(
-                    f"Downloaded SHA-256: "
-                    f"{received_hash}"
-                )
-
-                if expected_hash == received_hash:
-                    send_message(
-                        client_socket,
-                        DOWNLOAD_INTEGRITY_OK
-                    )
-
-                    print(
-                        "SHA-256 verification: PASSED"
-                    )
-
-                    print(
-                        "Download completed successfully."
-                    )
-
-                    print(
-                        f"Saved to: {download_path}"
-                    )
-
-                else:
-                    send_message(
-                        client_socket,
-                        DOWNLOAD_INTEGRITY_FAILED
-                    )
-
-                    print(
-                        "SHA-256 verification: FAILED"
-                    )
-
-                    print(
-                        "Downloaded file may be corrupted."
-                    )
-
-            elif choice == "4":
                 send_message(
                     client_socket,
                     DELETE
                 )
 
-                print(
-                    "DELETE request sent."
+                send_message(
+                    client_socket,
+                    filename
                 )
 
                 response = receive_message(
                     client_socket
                 )
 
-                if response == ERROR:
+                if response == DELETE_SUCCESS:
                     print(
-                        "Server reported an error."
+                        f"File deleted successfully: "
+                        f"{filename}"
+                    )
+
+                elif response == DELETE_FAILED:
+                    print(
+                        f"File could not be deleted: "
+                        f"{filename}"
+                    )
+
+                else:
+                    print(
+                        "Unexpected response."
                     )
 
             elif choice == "5":
