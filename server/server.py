@@ -38,7 +38,10 @@ from server.file_manager import (
     list_files,
     get_storage_path,
     calculate_sha256,
-    atomic_replace
+    atomic_replace,
+    is_valid_filename,
+    is_valid_file_size,
+    is_valid_sha256
 )
 
 
@@ -171,6 +174,11 @@ def handle_client(client_socket, client_address):
                 parts = metadata.split("|")
 
                 if len(parts) != 2:
+                    print(
+                        f"[{client_address}] "
+                        f"Invalid upload metadata."
+                    )
+
                     send_message(
                         client_socket,
                         UPLOAD_REJECTED
@@ -183,30 +191,37 @@ def handle_client(client_socket, client_address):
                     file_size = int(parts[1])
 
                 except ValueError:
+                    print(
+                        f"[{client_address}] "
+                        f"Invalid upload file size."
+                    )
+
                     send_message(
                         client_socket,
                         UPLOAD_REJECTED
                     )
                     continue
 
-                if not filename:
+                if not is_valid_filename(filename):
+                    print(
+                        f"[{client_address}] "
+                        f"Invalid filename rejected: "
+                        f"{filename}"
+                    )
+
                     send_message(
                         client_socket,
                         UPLOAD_REJECTED
                     )
                     continue
 
-                if file_size < 0:
-                    send_message(
-                        client_socket,
-                        UPLOAD_REJECTED
+                if not is_valid_file_size(file_size):
+                    print(
+                        f"[{client_address}] "
+                        f"Invalid file size rejected: "
+                        f"{file_size}"
                     )
-                    continue
 
-                if (
-                    os.path.basename(filename)
-                    != filename
-                ):
                     send_message(
                         client_socket,
                         UPLOAD_REJECTED
@@ -272,6 +287,21 @@ def handle_client(client_socket, client_address):
                             client_socket
                         )
 
+                        if not is_valid_sha256(
+                            expected_hash
+                        ):
+                            print(
+                                f"[{client_address}] "
+                                f"Invalid SHA-256 hash received."
+                            )
+
+                            send_message(
+                                client_socket,
+                                INTEGRITY_FAILED
+                            )
+
+                            continue
+
                         received_hash = calculate_sha256(
                             temp_path
                         )
@@ -288,7 +318,7 @@ def handle_client(client_socket, client_address):
                             f"{received_hash}"
                         )
 
-                        if expected_hash == received_hash:
+                        if expected_hash.lower() == received_hash.lower():
                             send_message(
                                 client_socket,
                                 INTEGRITY_OK
@@ -373,17 +403,13 @@ def handle_client(client_socket, client_address):
                     client_socket
                 )
 
-                if not filename:
-                    send_message(
-                        client_socket,
-                        DOWNLOAD_REJECTED
+                if not is_valid_filename(filename):
+                    print(
+                        f"[{client_address}] "
+                        f"Invalid download filename rejected: "
+                        f"{filename}"
                     )
-                    continue
 
-                if (
-                    os.path.basename(filename)
-                    != filename
-                ):
                     send_message(
                         client_socket,
                         DOWNLOAD_REJECTED
@@ -430,9 +456,23 @@ def handle_client(client_socket, client_address):
                         file_path
                     )
 
+                    if not is_valid_file_size(file_size):
+                        send_message(
+                            client_socket,
+                            DOWNLOAD_REJECTED
+                        )
+                        continue
+
                     file_hash = calculate_sha256(
                         file_path
                     )
+
+                    if not is_valid_sha256(file_hash):
+                        send_message(
+                            client_socket,
+                            DOWNLOAD_REJECTED
+                        )
+                        continue
 
                     metadata = (
                         f"{file_size}|{file_hash}"
@@ -485,11 +525,18 @@ def handle_client(client_socket, client_address):
                             f"{filename}"
                         )
 
-                    else:
+                    elif response == DOWNLOAD_INTEGRITY_FAILED:
                         print(
                             f"[{client_address}] "
                             f"Download integrity verification "
                             f"failed: {filename}"
+                        )
+
+                    else:
+                        print(
+                            f"[{client_address}] "
+                            f"Invalid download integrity "
+                            f"response: {response}"
                         )
 
                     print(
@@ -507,17 +554,13 @@ def handle_client(client_socket, client_address):
                     client_socket
                 )
 
-                if not filename:
-                    send_message(
-                        client_socket,
-                        DELETE_FAILED
+                if not is_valid_filename(filename):
+                    print(
+                        f"[{client_address}] "
+                        f"Invalid delete filename rejected: "
+                        f"{filename}"
                     )
-                    continue
 
-                if (
-                    os.path.basename(filename)
-                    != filename
-                ):
                     send_message(
                         client_socket,
                         DELETE_FAILED
@@ -648,6 +691,7 @@ def start_server():
     print("Mode        : Multi-Client")
     print("Locking     : Per-File")
     print("Temp Cleanup: Enabled")
+    print("Validation  : Enabled")
     print("Waiting for clients...")
     print("=" * 50)
 
