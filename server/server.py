@@ -48,6 +48,8 @@ from server.file_manager import (
 file_locks = {}
 file_locks_manager = threading.Lock()
 
+progress_display_lock = threading.Lock()
+
 
 def get_file_lock(filename):
     with file_locks_manager:
@@ -57,15 +59,68 @@ def get_file_lock(filename):
         return file_locks[filename]
 
 
+def display_progress(
+    transferred,
+    total,
+    client_address,
+    operation,
+    filename
+):
+    if total <= 0:
+        percentage = 100
+    else:
+        percentage = (
+            transferred / total
+        ) * 100
+
+    bar_length = 30
+
+    filled_length = (
+        int(
+            bar_length
+            * transferred
+            / total
+        )
+        if total > 0
+        else bar_length
+    )
+
+    progress_bar = (
+        "=" * filled_length
+        + " " * (
+            bar_length
+            - filled_length
+        )
+    )
+
+    with progress_display_lock:
+        print(
+            f"\r[{client_address}] "
+            f"{operation} {filename}: "
+            f"[{progress_bar}] "
+            f"{percentage:6.2f}% "
+            f"({transferred} / {total} bytes)",
+            end="",
+            flush=True
+        )
+
+        if transferred >= total:
+            print()
+
+
 def cleanup_stale_temp_files():
-    print("Checking for stale temporary files...")
+    print(
+        "Checking for stale temporary files..."
+    )
 
     storage_dir = os.path.dirname(
         get_storage_path("dummy")
     )
 
     if not os.path.exists(storage_dir):
-        print("Storage directory does not exist.")
+        print(
+            "Storage directory does not exist."
+        )
         return
 
     cleaned_count = 0
@@ -99,7 +154,9 @@ def cleanup_stale_temp_files():
             )
 
     if cleaned_count == 0:
-        print("No stale temporary files found.")
+        print(
+            "No stale temporary files found."
+        )
 
     else:
         print(
@@ -108,13 +165,22 @@ def cleanup_stale_temp_files():
         )
 
 
-def handle_client(client_socket, client_address):
-    print(f"Client connected: {client_address}")
+def handle_client(
+    client_socket,
+    client_address
+):
+    print(
+        f"Client connected: {client_address}"
+    )
 
     try:
-        message = receive_message(client_socket)
+        message = receive_message(
+            client_socket
+        )
 
-        print(f"Received: {message}")
+        print(
+            f"Received: {message}"
+        )
 
         if message != HELLO:
             send_message(
@@ -129,14 +195,18 @@ def handle_client(client_socket, client_address):
         )
 
         print(
-            f"[{client_address}] Sent: HELLO_ACK"
+            f"[{client_address}] "
+            f"Sent: HELLO_ACK"
         )
 
         while True:
-            command = receive_message(client_socket)
+            command = receive_message(
+                client_socket
+            )
 
             print(
-                f"[{client_address}] Command: {command}"
+                f"[{client_address}] "
+                f"Command: {command}"
             )
 
             if command == LIST:
@@ -154,7 +224,9 @@ def handle_client(client_socket, client_address):
                     )
 
                 else:
-                    file_list = "\n".join(files)
+                    file_list = "\n".join(
+                        files
+                    )
 
                     send_message(
                         client_socket,
@@ -188,7 +260,9 @@ def handle_client(client_socket, client_address):
                 filename = parts[0]
 
                 try:
-                    file_size = int(parts[1])
+                    file_size = int(
+                        parts[1]
+                    )
 
                 except ValueError:
                     print(
@@ -202,7 +276,9 @@ def handle_client(client_socket, client_address):
                     )
                     continue
 
-                if not is_valid_filename(filename):
+                if not is_valid_filename(
+                    filename
+                ):
                     print(
                         f"[{client_address}] "
                         f"Invalid filename rejected: "
@@ -215,7 +291,9 @@ def handle_client(client_socket, client_address):
                     )
                     continue
 
-                if not is_valid_file_size(file_size):
+                if not is_valid_file_size(
+                    file_size
+                ):
                     print(
                         f"[{client_address}] "
                         f"Invalid file size rejected: "
@@ -235,20 +313,25 @@ def handle_client(client_socket, client_address):
 
                 print(
                     f"[{client_address}] "
-                    f"Upload size: {file_size} bytes"
+                    f"Upload size: "
+                    f"{file_size} bytes"
                 )
 
-                file_lock = get_file_lock(filename)
+                file_lock = get_file_lock(
+                    filename
+                )
 
                 print(
                     f"[{client_address}] "
-                    f"Waiting for lock: {filename}"
+                    f"Waiting for lock: "
+                    f"{filename}"
                 )
 
                 with file_lock:
                     print(
                         f"[{client_address}] "
-                        f"Lock acquired: {filename}"
+                        f"Lock acquired: "
+                        f"{filename}"
                     )
 
                     temp_path = get_storage_path(
@@ -267,10 +350,24 @@ def handle_client(client_socket, client_address):
                             UPLOAD_READY
                         )
 
+                        print(
+                            f"[{client_address}] "
+                            f"Receiving file: "
+                            f"{filename}"
+                        )
+
                         receive_file(
                             client_socket,
                             temp_path,
-                            file_size
+                            file_size,
+                            progress_callback=lambda transferred, total:
+                                display_progress(
+                                    transferred,
+                                    total,
+                                    client_address,
+                                    "UPLOAD",
+                                    filename
+                                )
                         )
 
                         print(
@@ -292,7 +389,8 @@ def handle_client(client_socket, client_address):
                         ):
                             print(
                                 f"[{client_address}] "
-                                f"Invalid SHA-256 hash received."
+                                f"Invalid SHA-256 hash "
+                                f"received."
                             )
 
                             send_message(
@@ -318,7 +416,10 @@ def handle_client(client_socket, client_address):
                             f"{received_hash}"
                         )
 
-                        if expected_hash.lower() == received_hash.lower():
+                        if (
+                            expected_hash.lower()
+                            == received_hash.lower()
+                        ):
                             send_message(
                                 client_socket,
                                 INTEGRITY_OK
@@ -350,14 +451,15 @@ def handle_client(client_socket, client_address):
 
                             print(
                                 f"[{client_address}] "
-                                f"Integrity verification failed: "
-                                f"{filename}"
+                                f"Integrity verification "
+                                f"failed: {filename}"
                             )
 
                     except Exception as error:
                         print(
                             f"[{client_address}] "
-                            f"Upload failed: {filename}"
+                            f"Upload failed: "
+                            f"{filename}"
                         )
 
                         print(
@@ -370,27 +472,34 @@ def handle_client(client_socket, client_address):
                     finally:
                         if (
                             not upload_completed
-                            and os.path.exists(temp_path)
+                            and os.path.exists(
+                                temp_path
+                            )
                         ):
                             try:
-                                os.remove(temp_path)
+                                os.remove(
+                                    temp_path
+                                )
 
                                 print(
                                     f"[{client_address}] "
-                                    f"Temporary file cleaned up: "
+                                    f"Temporary file "
+                                    f"cleaned up: "
                                     f"{filename}.tmp"
                                 )
 
                             except OSError as cleanup_error:
                                 print(
                                     f"[{client_address}] "
-                                    f"Could not remove temporary file: "
+                                    f"Could not remove "
+                                    f"temporary file: "
                                     f"{cleanup_error}"
                                 )
 
                     print(
                         f"[{client_address}] "
-                        f"Lock released: {filename}"
+                        f"Lock released: "
+                        f"{filename}"
                     )
 
             elif command == DOWNLOAD:
@@ -403,11 +512,13 @@ def handle_client(client_socket, client_address):
                     client_socket
                 )
 
-                if not is_valid_filename(filename):
+                if not is_valid_filename(
+                    filename
+                ):
                     print(
                         f"[{client_address}] "
-                        f"Invalid download filename rejected: "
-                        f"{filename}"
+                        f"Invalid download filename "
+                        f"rejected: {filename}"
                     )
 
                     send_message(
@@ -420,10 +531,13 @@ def handle_client(client_socket, client_address):
                     filename
                 )
 
-                if not os.path.isfile(file_path):
+                if not os.path.isfile(
+                    file_path
+                ):
                     print(
                         f"[{client_address}] "
-                        f"File not found: {filename}"
+                        f"File not found: "
+                        f"{filename}"
                     )
 
                     send_message(
@@ -432,20 +546,26 @@ def handle_client(client_socket, client_address):
                     )
                     continue
 
-                file_lock = get_file_lock(filename)
+                file_lock = get_file_lock(
+                    filename
+                )
 
                 print(
                     f"[{client_address}] "
-                    f"Waiting for lock: {filename}"
+                    f"Waiting for lock: "
+                    f"{filename}"
                 )
 
                 with file_lock:
                     print(
                         f"[{client_address}] "
-                        f"Download lock acquired: {filename}"
+                        f"Download lock acquired: "
+                        f"{filename}"
                     )
 
-                    if not os.path.isfile(file_path):
+                    if not os.path.isfile(
+                        file_path
+                    ):
                         send_message(
                             client_socket,
                             DOWNLOAD_REJECTED
@@ -456,7 +576,9 @@ def handle_client(client_socket, client_address):
                         file_path
                     )
 
-                    if not is_valid_file_size(file_size):
+                    if not is_valid_file_size(
+                        file_size
+                    ):
                         send_message(
                             client_socket,
                             DOWNLOAD_REJECTED
@@ -467,7 +589,9 @@ def handle_client(client_socket, client_address):
                         file_path
                     )
 
-                    if not is_valid_sha256(file_hash):
+                    if not is_valid_sha256(
+                        file_hash
+                    ):
                         send_message(
                             client_socket,
                             DOWNLOAD_REJECTED
@@ -475,7 +599,8 @@ def handle_client(client_socket, client_address):
                         continue
 
                     metadata = (
-                        f"{file_size}|{file_hash}"
+                        f"{file_size}|"
+                        f"{file_hash}"
                     )
 
                     send_message(
@@ -490,23 +615,34 @@ def handle_client(client_socket, client_address):
 
                     print(
                         f"[{client_address}] "
-                        f"Sending file: {filename}"
+                        f"Sending file: "
+                        f"{filename}"
                     )
 
                     print(
                         f"[{client_address}] "
-                        f"File size: {file_size} bytes"
+                        f"File size: "
+                        f"{file_size} bytes"
                     )
 
                     print(
                         f"[{client_address}] "
-                        f"SHA-256: {file_hash}"
+                        f"SHA-256: "
+                        f"{file_hash}"
                     )
 
                     send_file(
                         client_socket,
                         file_path,
-                        file_size
+                        file_size,
+                        progress_callback=lambda transferred, total:
+                            display_progress(
+                                transferred,
+                                total,
+                                client_address,
+                                "DOWNLOAD",
+                                filename
+                            )
                     )
 
                     send_message(
@@ -518,30 +654,39 @@ def handle_client(client_socket, client_address):
                         client_socket
                     )
 
-                    if response == DOWNLOAD_INTEGRITY_OK:
+                    if (
+                        response
+                        == DOWNLOAD_INTEGRITY_OK
+                    ):
                         print(
                             f"[{client_address}] "
-                            f"Download integrity verified: "
-                            f"{filename}"
+                            f"Download integrity "
+                            f"verified: {filename}"
                         )
 
-                    elif response == DOWNLOAD_INTEGRITY_FAILED:
+                    elif (
+                        response
+                        == DOWNLOAD_INTEGRITY_FAILED
+                    ):
                         print(
                             f"[{client_address}] "
-                            f"Download integrity verification "
-                            f"failed: {filename}"
+                            f"Download integrity "
+                            f"verification failed: "
+                            f"{filename}"
                         )
 
                     else:
                         print(
                             f"[{client_address}] "
-                            f"Invalid download integrity "
-                            f"response: {response}"
+                            f"Invalid download "
+                            f"integrity response: "
+                            f"{response}"
                         )
 
                     print(
                         f"[{client_address}] "
-                        f"Download lock released: {filename}"
+                        f"Download lock released: "
+                        f"{filename}"
                     )
 
             elif command == DELETE:
@@ -554,11 +699,13 @@ def handle_client(client_socket, client_address):
                     client_socket
                 )
 
-                if not is_valid_filename(filename):
+                if not is_valid_filename(
+                    filename
+                ):
                     print(
                         f"[{client_address}] "
-                        f"Invalid delete filename rejected: "
-                        f"{filename}"
+                        f"Invalid delete filename "
+                        f"rejected: {filename}"
                     )
 
                     send_message(
@@ -571,7 +718,9 @@ def handle_client(client_socket, client_address):
                     filename
                 )
 
-                file_lock = get_file_lock(filename)
+                file_lock = get_file_lock(
+                    filename
+                )
 
                 print(
                     f"[{client_address}] "
@@ -586,8 +735,12 @@ def handle_client(client_socket, client_address):
                         f"{filename}"
                     )
 
-                    if os.path.isfile(file_path):
-                        os.remove(file_path)
+                    if os.path.isfile(
+                        file_path
+                    ):
+                        os.remove(
+                            file_path
+                        )
 
                         send_message(
                             client_socket,
@@ -596,7 +749,8 @@ def handle_client(client_socket, client_address):
 
                         print(
                             f"[{client_address}] "
-                            f"File deleted: {filename}"
+                            f"File deleted: "
+                            f"{filename}"
                         )
 
                     else:
@@ -607,8 +761,8 @@ def handle_client(client_socket, client_address):
 
                         print(
                             f"[{client_address}] "
-                            f"File not found for deletion: "
-                            f"{filename}"
+                            f"File not found for "
+                            f"deletion: {filename}"
                         )
 
                     print(
@@ -683,16 +837,37 @@ def start_server():
     server_socket.listen()
 
     print("=" * 50)
-    print("       RELIABLE FILE TRANSFER SERVER")
+    print(
+        "       RELIABLE FILE TRANSFER SERVER"
+    )
     print("=" * 50)
-    print(f"Server IP   : {SERVER_HOST}")
-    print(f"Server Port : {SERVER_PORT}")
-    print("Status      : Running")
-    print("Mode        : Multi-Client")
-    print("Locking     : Per-File")
-    print("Temp Cleanup: Enabled")
-    print("Validation  : Enabled")
-    print("Waiting for clients...")
+    print(
+        f"Server IP   : {SERVER_HOST}"
+    )
+    print(
+        f"Server Port : {SERVER_PORT}"
+    )
+    print(
+        "Status      : Running"
+    )
+    print(
+        "Mode        : Multi-Client"
+    )
+    print(
+        "Locking     : Per-File"
+    )
+    print(
+        "Temp Cleanup: Enabled"
+    )
+    print(
+        "Validation  : Enabled"
+    )
+    print(
+        "Progress    : Enabled"
+    )
+    print(
+        "Waiting for clients..."
+    )
     print("=" * 50)
 
     while True:
@@ -711,8 +886,8 @@ def start_server():
         client_thread.start()
 
         print(
-            f"Active client thread started for "
-            f"{client_address}"
+            f"Active client thread started "
+            f"for {client_address}"
         )
 
 
