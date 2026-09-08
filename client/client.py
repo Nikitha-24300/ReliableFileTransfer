@@ -1,6 +1,9 @@
+
 import hashlib
 import os
+import re
 import socket
+import time
 
 from shared.config import SERVER_HOST, SERVER_PORT
 from shared.network import (
@@ -50,21 +53,77 @@ def calculate_sha256(file_path):
     return sha256.hexdigest()
 
 
+def is_valid_filename(filename):
+    if not filename:
+        return False
+
+    if len(filename) > 255:
+        return False
+
+    if os.path.basename(filename) != filename:
+        return False
+
+    if filename in (".", ".."):
+        return False
+
+    invalid_characters = '<>:"/\\|?*'
+
+    for character in invalid_characters:
+        if character in filename:
+            return False
+
+    if any(
+        ord(character) < 32
+        for character in filename
+    ):
+        return False
+
+    if filename.endswith(" ") or filename.endswith("."):
+        return False
+
+    return True
+
+
+def is_valid_file_size(file_size):
+    return file_size >= 0
+
+
+def is_valid_sha256(file_hash):
+    if not isinstance(file_hash, str):
+        return False
+
+    return re.fullmatch(
+        r"[0-9a-fA-F]{64}",
+        file_hash
+    ) is not None
+
+
 def display_progress(transferred, total):
     if total <= 0:
         percentage = 100
     else:
-        percentage = (transferred / total) * 100
+        percentage = (
+            transferred / total
+        ) * 100
 
     bar_length = 30
 
-    filled_length = int(
-        bar_length * transferred / total
-    ) if total > 0 else bar_length
+    filled_length = (
+        int(
+            bar_length
+            * transferred
+            / total
+        )
+        if total > 0
+        else bar_length
+    )
 
     progress_bar = (
         "=" * filled_length
-        + " " * (bar_length - filled_length)
+        + " " * (
+            bar_length
+            - filled_length
+        )
     )
 
     print(
@@ -73,6 +132,45 @@ def display_progress(transferred, total):
         f"({transferred} / {total} bytes)",
         end="",
         flush=True
+    )
+
+
+def calculate_transfer_speed(
+    file_size,
+    duration
+):
+    if duration <= 0:
+        return 0
+
+    return file_size / duration
+
+
+def format_transfer_speed(speed):
+    if speed < 1024:
+        return f"{speed:.2f} B/s"
+
+    if speed < 1024 * 1024:
+        return f"{speed / 1024:.2f} KB/s"
+
+    return f"{speed / (1024 * 1024):.2f} MB/s"
+
+
+def display_transfer_statistics(
+    file_size,
+    duration
+):
+    speed = calculate_transfer_speed(
+        file_size,
+        duration
+    )
+
+    print(
+        f"Transfer duration : {duration:.2f} seconds"
+    )
+
+    print(
+        f"Transfer speed    : "
+        f"{format_transfer_speed(speed)}"
     )
 
 
@@ -220,9 +318,25 @@ def start_client():
                     file_path
                 )
 
+                if not is_valid_filename(
+                    filename
+                ):
+                    print(
+                        "ERROR: Invalid filename."
+                    )
+                    continue
+
                 file_size = os.path.getsize(
                     file_path
                 )
+
+                if not is_valid_file_size(
+                    file_size
+                ):
+                    print(
+                        "ERROR: Invalid file size."
+                    )
+                    continue
 
                 try:
                     file_hash = calculate_sha256(
@@ -233,6 +347,15 @@ def start_client():
                     print(
                         f"ERROR: Could not read the "
                         f"file: {error}"
+                    )
+                    continue
+
+                if not is_valid_sha256(
+                    file_hash
+                ):
+                    print(
+                        "ERROR: Could not calculate "
+                        "a valid SHA-256 hash."
                     )
                     continue
 
@@ -264,10 +387,15 @@ def start_client():
 
                     if response != UPLOAD_READY:
                         print(
-                            "ERROR: Unexpected response "
-                            "from server."
+                            "ERROR: Protocol error. "
+                            "Unexpected server response "
+                            "during upload preparation."
                         )
-                        continue
+                        print(
+                            "Connection will be closed "
+                            "to prevent protocol desynchronization."
+                        )
+                        return
 
                     print()
                     print(
@@ -282,6 +410,8 @@ def start_client():
                         f"SHA-256: {file_hash}"
                     )
 
+                    transfer_start_time = time.perf_counter()
+
                     send_file(
                         client_socket,
                         file_path,
@@ -289,9 +419,21 @@ def start_client():
                         progress_callback=display_progress
                     )
 
+                    transfer_end_time = time.perf_counter()
+
+                    transfer_duration = (
+                        transfer_end_time
+                        - transfer_start_time
+                    )
+
                     print()
                     print(
                         "File data sent successfully."
+                    )
+
+                    display_transfer_statistics(
+                        file_size,
+                        transfer_duration
                     )
 
                     response = receive_message(
@@ -300,10 +442,15 @@ def start_client():
 
                     if response != TRANSFER_COMPLETE:
                         print(
-                            "ERROR: Server did not "
-                            "confirm file transfer."
+                            "ERROR: Protocol error. "
+                            "Server did not confirm "
+                            "file transfer."
                         )
-                        continue
+                        print(
+                            "Connection will be closed "
+                            "to prevent protocol desynchronization."
+                        )
+                        return
 
                     send_message(
                         client_socket,
@@ -330,9 +477,14 @@ def start_client():
 
                         else:
                             print(
-                                "ERROR: Server did not "
-                                "confirm upload completion."
+                                "ERROR: Protocol error. "
+                                "Server did not confirm "
+                                "upload completion."
                             )
+                            print(
+                                "Connection will be closed."
+                            )
+                            return
 
                     elif response == INTEGRITY_FAILED:
                         print(
@@ -346,9 +498,14 @@ def start_client():
 
                     else:
                         print(
-                            "ERROR: Unexpected integrity "
+                            "ERROR: Protocol error. "
+                            "Unexpected integrity "
                             "response from server."
                         )
+                        print(
+                            "Connection will be closed."
+                        )
+                        return
 
                 except ConnectionError:
                     print()
@@ -387,6 +544,14 @@ def start_client():
                     )
                     continue
 
+                if not is_valid_filename(
+                    filename
+                ):
+                    print(
+                        "ERROR: Invalid filename."
+                    )
+                    continue
+
                 try:
                     send_message(
                         client_socket,
@@ -411,10 +576,15 @@ def start_client():
 
                     if response != DOWNLOAD_READY:
                         print(
-                            "ERROR: Unexpected response "
-                            "from server."
+                            "ERROR: Protocol error. "
+                            "Unexpected server response "
+                            "during download preparation."
                         )
-                        continue
+                        print(
+                            "Connection will be closed "
+                            "to prevent protocol desynchronization."
+                        )
+                        return
 
                     metadata = receive_message(
                         client_socket
@@ -427,19 +597,53 @@ def start_client():
                             "ERROR: Invalid download "
                             "metadata received."
                         )
-                        continue
+                        print(
+                            "Connection will be closed "
+                            "to prevent protocol desynchronization."
+                        )
+                        return
 
                     try:
-                        file_size = int(parts[0])
+                        file_size = int(
+                            parts[0]
+                        )
 
                     except ValueError:
                         print(
                             "ERROR: Invalid file size "
                             "received from server."
                         )
-                        continue
+                        print(
+                            "Connection will be closed "
+                            "to prevent protocol desynchronization."
+                        )
+                        return
 
                     expected_hash = parts[1]
+
+                    if not is_valid_file_size(
+                        file_size
+                    ):
+                        print(
+                            "ERROR: Server sent an "
+                            "invalid file size."
+                        )
+                        print(
+                            "Connection will be closed."
+                        )
+                        return
+
+                    if not is_valid_sha256(
+                        expected_hash
+                    ):
+                        print(
+                            "ERROR: Server sent an "
+                            "invalid SHA-256 hash."
+                        )
+                        print(
+                            "Connection will be closed."
+                        )
+                        return
 
                     download_dir = os.path.join(
                         os.path.dirname(
@@ -479,6 +683,10 @@ def start_client():
                     download_completed = False
 
                     try:
+                        transfer_start_time = (
+                            time.perf_counter()
+                        )
+
                         receive_file(
                             client_socket,
                             temp_download_path,
@@ -486,9 +694,23 @@ def start_client():
                             progress_callback=display_progress
                         )
 
+                        transfer_end_time = (
+                            time.perf_counter()
+                        )
+
+                        transfer_duration = (
+                            transfer_end_time
+                            - transfer_start_time
+                        )
+
                         print()
                         print(
                             "File data received successfully."
+                        )
+
+                        display_transfer_statistics(
+                            file_size,
+                            transfer_duration
                         )
 
                         response = receive_message(
@@ -497,10 +719,15 @@ def start_client():
 
                         if response != DOWNLOAD_COMPLETE:
                             print(
-                                "ERROR: Server did not "
-                                "confirm download completion."
+                                "ERROR: Protocol error. "
+                                "Server did not confirm "
+                                "download completion."
                             )
-                            continue
+                            print(
+                                "Connection will be closed "
+                                "to prevent protocol desynchronization."
+                            )
+                            return
 
                         received_hash = calculate_sha256(
                             temp_download_path
@@ -511,7 +738,28 @@ def start_client():
                             f"{received_hash}"
                         )
 
-                        if expected_hash == received_hash:
+                        if not is_valid_sha256(
+                            received_hash
+                        ):
+                            print(
+                                "ERROR: Local SHA-256 "
+                                "calculation failed."
+                            )
+
+                            send_message(
+                                client_socket,
+                                DOWNLOAD_INTEGRITY_FAILED
+                            )
+
+                            print(
+                                "Connection will be closed."
+                            )
+                            return
+
+                        if (
+                            expected_hash.lower()
+                            == received_hash.lower()
+                        ):
                             send_message(
                                 client_socket,
                                 DOWNLOAD_INTEGRITY_OK
@@ -632,6 +880,14 @@ def start_client():
                     )
                     continue
 
+                if not is_valid_filename(
+                    filename
+                ):
+                    print(
+                        "ERROR: Invalid filename."
+                    )
+                    continue
+
                 try:
                     send_message(
                         client_socket,
@@ -736,3 +992,4 @@ def start_client():
 
 if __name__ == "__main__":
     start_client()
+
