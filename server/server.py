@@ -1,6 +1,7 @@
 import os
 import socket
 import threading
+import time
 
 from shared.config import SERVER_HOST, SERVER_PORT
 from shared.network import (
@@ -44,6 +45,11 @@ from server.file_manager import (
     is_valid_sha256
 )
 
+from server.transfer_logger import (
+    initialize_logger,
+    log_transfer
+)
+
 
 file_locks = {}
 file_locks_manager = threading.Lock()
@@ -57,6 +63,51 @@ def get_file_lock(filename):
             file_locks[filename] = threading.Lock()
 
         return file_locks[filename]
+
+
+def calculate_transfer_speed(
+    file_size,
+    duration
+):
+    if duration <= 0:
+        return 0
+
+    return file_size / duration
+
+
+def format_transfer_speed(speed):
+    if speed < 1024:
+        return f"{speed:.2f} B/s"
+
+    if speed < 1024 * 1024:
+        return f"{speed / 1024:.2f} KB/s"
+
+    return f"{speed / (1024 * 1024):.2f} MB/s"
+
+
+def display_transfer_statistics(
+    file_size,
+    duration
+):
+    speed = calculate_transfer_speed(
+        file_size,
+        duration
+    )
+
+    formatted_speed = format_transfer_speed(
+        speed
+    )
+
+    print(
+        f"Transfer duration : {duration:.2f} seconds"
+    )
+
+    print(
+        f"Transfer speed    : "
+        f"{formatted_speed}"
+    )
+
+    return formatted_speed
 
 
 def display_progress(
@@ -343,6 +394,8 @@ def handle_client(
                     )
 
                     upload_completed = False
+                    transfer_duration = 0
+                    transfer_speed = "0.00 B/s"
 
                     try:
                         send_message(
@@ -354,6 +407,10 @@ def handle_client(
                             f"[{client_address}] "
                             f"Receiving file: "
                             f"{filename}"
+                        )
+
+                        transfer_start_time = (
+                            time.perf_counter()
                         )
 
                         receive_file(
@@ -370,9 +427,25 @@ def handle_client(
                                 )
                         )
 
+                        transfer_end_time = (
+                            time.perf_counter()
+                        )
+
+                        transfer_duration = (
+                            transfer_end_time
+                            - transfer_start_time
+                        )
+
                         print(
                             f"[{client_address}] "
                             f"Temporary file received."
+                        )
+
+                        transfer_speed = (
+                            display_transfer_statistics(
+                                file_size,
+                                transfer_duration
+                            )
                         )
 
                         send_message(
@@ -396,6 +469,16 @@ def handle_client(
                             send_message(
                                 client_socket,
                                 INTEGRITY_FAILED
+                            )
+
+                            log_transfer(
+                                client_address,
+                                "UPLOAD",
+                                filename,
+                                file_size,
+                                transfer_duration,
+                                transfer_speed,
+                                "FAILED"
                             )
 
                             continue
@@ -437,6 +520,16 @@ def handle_client(
                                 UPLOAD_SUCCESS
                             )
 
+                            log_transfer(
+                                client_address,
+                                "UPLOAD",
+                                filename,
+                                file_size,
+                                transfer_duration,
+                                transfer_speed,
+                                "SUCCESS"
+                            )
+
                             print(
                                 f"[{client_address}] "
                                 f"Upload completed: "
@@ -447,6 +540,16 @@ def handle_client(
                             send_message(
                                 client_socket,
                                 INTEGRITY_FAILED
+                            )
+
+                            log_transfer(
+                                client_address,
+                                "UPLOAD",
+                                filename,
+                                file_size,
+                                transfer_duration,
+                                transfer_speed,
+                                "INTEGRITY_FAILED"
                             )
 
                             print(
@@ -466,6 +569,17 @@ def handle_client(
                             f"[{client_address}] "
                             f"Reason: {error}"
                         )
+
+                        if transfer_duration > 0:
+                            log_transfer(
+                                client_address,
+                                "UPLOAD",
+                                filename,
+                                file_size,
+                                transfer_duration,
+                                transfer_speed,
+                                "FAILED"
+                            )
 
                         raise
 
@@ -579,6 +693,12 @@ def handle_client(
                     if not is_valid_file_size(
                         file_size
                     ):
+                        print(
+                            f"[{client_address}] "
+                            f"Invalid file size for "
+                            f"{filename}"
+                        )
+
                         send_message(
                             client_socket,
                             DOWNLOAD_REJECTED
@@ -592,6 +712,12 @@ def handle_client(
                     if not is_valid_sha256(
                         file_hash
                     ):
+                        print(
+                            f"[{client_address}] "
+                            f"Invalid SHA-256 for "
+                            f"{filename}"
+                        )
+
                         send_message(
                             client_socket,
                             DOWNLOAD_REJECTED
@@ -631,6 +757,10 @@ def handle_client(
                         f"{file_hash}"
                     )
 
+                    transfer_start_time = (
+                        time.perf_counter()
+                    )
+
                     send_file(
                         client_socket,
                         file_path,
@@ -643,6 +773,22 @@ def handle_client(
                                 "DOWNLOAD",
                                 filename
                             )
+                    )
+
+                    transfer_end_time = (
+                        time.perf_counter()
+                    )
+
+                    transfer_duration = (
+                        transfer_end_time
+                        - transfer_start_time
+                    )
+
+                    transfer_speed = (
+                        display_transfer_statistics(
+                            file_size,
+                            transfer_duration
+                        )
                     )
 
                     send_message(
@@ -658,6 +804,16 @@ def handle_client(
                         response
                         == DOWNLOAD_INTEGRITY_OK
                     ):
+                        log_transfer(
+                            client_address,
+                            "DOWNLOAD",
+                            filename,
+                            file_size,
+                            transfer_duration,
+                            transfer_speed,
+                            "SUCCESS"
+                        )
+
                         print(
                             f"[{client_address}] "
                             f"Download integrity "
@@ -668,6 +824,16 @@ def handle_client(
                         response
                         == DOWNLOAD_INTEGRITY_FAILED
                     ):
+                        log_transfer(
+                            client_address,
+                            "DOWNLOAD",
+                            filename,
+                            file_size,
+                            transfer_duration,
+                            transfer_speed,
+                            "INTEGRITY_FAILED"
+                        )
+
                         print(
                             f"[{client_address}] "
                             f"Download integrity "
@@ -676,12 +842,30 @@ def handle_client(
                         )
 
                     else:
+                        log_transfer(
+                            client_address,
+                            "DOWNLOAD",
+                            filename,
+                            file_size,
+                            transfer_duration,
+                            transfer_speed,
+                            "PROTOCOL_ERROR"
+                        )
+
                         print(
                             f"[{client_address}] "
-                            f"Invalid download "
-                            f"integrity response: "
+                            f"PROTOCOL ERROR: Invalid "
+                            f"download integrity response: "
                             f"{response}"
                         )
+
+                        print(
+                            f"[{client_address}] "
+                            f"Closing connection because "
+                            f"protocol state is invalid."
+                        )
+
+                        return
 
                     print(
                         f"[{client_address}] "
@@ -819,6 +1003,8 @@ def handle_client(
 def start_server():
     cleanup_stale_temp_files()
 
+    initialize_logger()
+
     server_socket = socket.socket(
         socket.AF_INET,
         socket.SOCK_STREAM
@@ -864,6 +1050,15 @@ def start_server():
     )
     print(
         "Progress    : Enabled"
+    )
+    print(
+        "Protocol    : Hardened"
+    )
+    print(
+        "Statistics  : Enabled"
+    )
+    print(
+        "Logging     : Enabled"
     )
     print(
         "Waiting for clients..."

@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>
+        Reliable File Transfer Dashboard
+    </title>
+
+    <link
+        rel="stylesheet"
+        href="{{ url_for(
+            'static',
+            filename='css/style.css'
+        ) }}"
+    >
+</head>
+
+<body>
+
+<header class="topbar">
+
+    <div>
+        <h1>
+            Reliable File Transfer
+        </h1>
+
+        <p>
+            Multi-Client TCP File Transfer Dashboard
+        </p>
+    </div>
+
+    <button
+        id="refreshButton"
+        class="refresh-button"
+    >
+        Refresh
+    </button>
+
+</header>
+
+
+<main class="container">
+
+
+    <section class="upload-panel">
+
+        <div>
+            <h2>
+                Upload File
+            </h2>
+
+            <p>
+                Upload a file through the reliable TCP server.
+            </p>
+        </div>
+
+        <div class="upload-controls">
+
+            <input
+                type="file"
+                id="fileInput"
+            >
+
+            <button
+                id="uploadButton"
+                class="primary-button"
+            >
+                Upload
+            </button>
+
+        </div>
+
+        <div
+            id="uploadStatus"
+            class="operation-status"
+        ></div>
+
+    </section>
+
+
+    <section class="summary-grid">
+
+        <div class="summary-card">
+
+            <span class="summary-label">
+                Stored Files
+            </span>
+
+            <span
+                id="fileCount"
+                class="summary-value"
+            >
+                0
+            </span>
+
+        </div>
+
+
+        <div class="summary-card">
+
+            <span class="summary-label">
+                Total Storage
+            </span>
+
+            <span
+                id="totalStorage"
+                class="summary-value"
+            >
+                0 B
+            </span>
+
+        </div>
+
+
+        <div class="summary-card">
+
+            <span class="summary-label">
+                Transfers
+            </span>
+
+            <span
+                id="transferCount"
+                class="summary-value"
+            >
+                0
+            </span>
+
+        </div>
+
+
+        <div class="summary-card">
+
+            <span class="summary-label">
+                Successful
+            </span>
+
+            <span
+                id="successCount"
+                class="summary-value"
+            >
+                0
+            </span>
+
+        </div>
+
+    </section>
+
+
+    <section class="panel">
+
+        <div class="panel-header">
+
+            <div>
+                <h2>
+                    Server Files
+                </h2>
+
+                <p>
+                    Files currently stored on the server
+                </p>
+            </div>
+
+        </div>
+
+
+        <div class="table-container">
+
+            <table>
+
+                <thead>
+
+                    <tr>
+                        <th>Filename</th>
+                        <th>Size</th>
+                        <th>SHA-256</th>
+                        <th>Actions</th>
+                    </tr>
+
+                </thead>
+
+
+                <tbody id="filesTableBody">
+
+                    <tr>
+                        <td
+                            colspan="4"
+                            class="loading"
+                        >
+                            Loading files...
+                        </td>
+                    </tr>
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+    </section>
+
+
+    <section class="panel">
+
+        <div class="panel-header">
+
+            <div>
+                <h2>
+                    Transfer History
+                </h2>
+
+                <p>
+                    Upload and download activity
+                </p>
+            </div>
+
+        </div>
+
+
+        <div class="table-container">
+
+            <table>
+
+                <thead>
+
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>Client</th>
+                        <th>Operation</th>
+                        <th>Filename</th>
+                        <th>Size</th>
+                        <th>Duration</th>
+                        <th>Speed</th>
+                        <th>Status</th>
+                    </tr>
+
+                </thead>
+
+
+                <tbody id="transfersTableBody">
+
+                    <tr>
+                        <td
+                            colspan="8"
+                            class="loading"
+                        >
+                            Loading transfer history...
+                        </td>
+                    </tr>
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+    </section>
+
+
+    <div
+        id="errorMessage"
+        class="error-message"
+    ></div>
+
+</main>
+
+
+<footer>
+    Reliable Multi-Client File Transfer System
+</footer>
+
+
+<script
+    src="{{ url_for(
+        'static',
+        filename='js/dashboard.js'
+    ) }}"
+></script>
+
+</body>
+
+</html>
