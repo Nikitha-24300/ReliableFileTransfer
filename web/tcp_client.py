@@ -72,6 +72,41 @@ def create_connection():
     return sock
 
 
+def check_server_status():
+    """
+    Checks if the TCP server is running and responding to the protocol handshake.
+    Connects to SERVER_HOST:SERVER_PORT, performs HELLO/HELLO_ACK, and exits cleanly.
+    """
+    import time
+    start = time.perf_counter()
+    try:
+        sock = create_connection()
+        try:
+            send_message(sock, "EXIT")
+            try:
+                receive_message(sock)
+            except Exception:
+                pass
+        finally:
+            sock.close()
+        latency_ms = round((time.perf_counter() - start) * 1000, 1)
+        return {
+            "online": True,
+            "host": SERVER_HOST,
+            "port": SERVER_PORT,
+            "latency_ms": latency_ms,
+            "protocol": "TCP (Length-Prefixed Framing)"
+        }
+    except Exception as e:
+        return {
+            "online": False,
+            "host": SERVER_HOST,
+            "port": SERVER_PORT,
+            "error": str(e)
+        }
+
+
+
 def upload_file(file_path):
     filename = os.path.basename(file_path)
 

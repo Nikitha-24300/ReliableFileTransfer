@@ -21,7 +21,8 @@ from server.transfer_logger import (
 from web.tcp_client import (
     upload_file,
     download_file,
-    delete_file
+    delete_file,
+    check_server_status
 )
 
 
@@ -33,6 +34,43 @@ def dashboard():
     return render_template(
         "index.html"
     )
+
+
+@app.route("/api/status")
+def get_status():
+    status = check_server_status()
+    files = list_files()
+    total_size = 0
+    for filename in files:
+        try:
+            total_size += os.path.getsize(get_storage_path(filename))
+        except OSError:
+            pass
+
+    log_file = get_log_file()
+    total_transfers = 0
+    successful_transfers = 0
+    failed_transfers = 0
+    if os.path.exists(log_file):
+        try:
+            with open(log_file, "r", encoding="utf-8") as file:
+                lines = [line.strip() for line in file.readlines()[1:] if line.strip()]
+                total_transfers = len(lines)
+                successful_transfers = sum(1 for line in lines if line.endswith("SUCCESS"))
+                failed_transfers = total_transfers - successful_transfers
+        except Exception:
+            pass
+
+    status.update({
+        "total_files": len(files),
+        "total_storage": total_size,
+        "total_transfers": total_transfers,
+        "successful_transfers": successful_transfers,
+        "failed_transfers": failed_transfers,
+        "success_rate": round((successful_transfers / total_transfers * 100), 1) if total_transfers > 0 else 100.0,
+        "storage_dir": os.path.normpath(get_storage_path(""))
+    })
+    return jsonify(status)
 
 
 @app.route("/api/files")
@@ -53,10 +91,15 @@ def get_files():
                 file_path
             )
 
+            stat = os.stat(file_path)
+            ext = os.path.splitext(filename)[1].lower().lstrip(".") or "txt"
+
             files.append({
                 "filename": filename,
                 "size": file_size,
-                "sha256": file_hash
+                "sha256": file_hash,
+                "modified": stat.st_mtime,
+                "extension": ext
             })
 
         except OSError:
@@ -170,7 +213,7 @@ def web_upload():
 
 
 @app.route(
-    "/api/download/<filename>"
+    "/api/download/<path:filename>"
 )
 def web_download(filename):
 
@@ -198,7 +241,7 @@ def web_download(filename):
 
 
 @app.route(
-    "/api/delete/<filename>",
+    "/api/delete/<path:filename>",
     methods=["DELETE"]
 )
 def web_delete(filename):

@@ -1,288 +1,355 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
-
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
-
-    <title>
-        Reliable File Transfer Dashboard
-    </title>
-
-    <link
-        rel="stylesheet"
-        href="{{ url_for(
-            'static',
-            filename='css/style.css'
-        ) }}"
-    >
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Reliable Multi-Client File Transfer System using TCP with SHA-256 integrity verification and per-file locking.">
+    <title>Reliable File Transfer System | TCP Socket Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
-
 <body>
 
-<header class="topbar">
-
-    <div>
-        <h1>
-            Reliable File Transfer
-        </h1>
-
-        <p>
-            Multi-Client TCP File Transfer Dashboard
-        </p>
-    </div>
-
-    <button
-        id="refreshButton"
-        class="refresh-button"
-    >
-        Refresh
-    </button>
-
-</header>
-
-
-<main class="container">
-
-
-    <section class="upload-panel">
-
-        <div>
-            <h2>
-                Upload File
-            </h2>
-
-            <p>
-                Upload a file through the reliable TCP server.
-            </p>
+    <!-- Header Navigation -->
+    <header class="topbar">
+        <div class="topbar-brand">
+            <div class="brand-icon" aria-hidden="true">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
+                    <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
+                    <line x1="6" y1="6" x2="6.01" y2="6"></line>
+                    <line x1="6" y1="18" x2="6.01" y2="18"></line>
+                </svg>
+            </div>
+            <div class="brand-text">
+                <h1>Reliable Multi-Client File Transfer</h1>
+                <p>Custom TCP Socket Protocol &bull; 4KB Chunk Framing &bull; SHA-256 Verification &bull; Per-File Locking</p>
+            </div>
         </div>
 
-        <div class="upload-controls">
-
-            <input
-                type="file"
-                id="fileInput"
-            >
-
-            <button
-                id="uploadButton"
-                class="primary-button"
-            >
-                Upload
+        <div class="topbar-actions">
+            <div id="serverStatusBadge" class="status-badge checking" title="Checking TCP server connectivity on port 5000">
+                <span class="status-indicator"></span>
+                <span id="serverStatusText">Checking TCP Server...</span>
+            </div>
+            <button id="refreshButton" class="btn btn-secondary btn-icon" title="Refresh Dashboard (Shortcut: R)" aria-label="Refresh Dashboard">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="spin-icon">
+                    <polyline points="23 4 23 10 17 10"></polyline>
+                    <polyline points="1 20 1 14 7 14"></polyline>
+                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                </svg>
+                <span>Refresh</span>
             </button>
-
         </div>
+    </header>
 
-        <div
-            id="uploadStatus"
-            class="operation-status"
-        ></div>
+    <!-- Main Container -->
+    <main class="container">
 
-    </section>
-
-
-    <section class="summary-grid">
-
-        <div class="summary-card">
-
-            <span class="summary-label">
-                Stored Files
-            </span>
-
-            <span
-                id="fileCount"
-                class="summary-value"
-            >
-                0
-            </span>
-
-        </div>
-
-
-        <div class="summary-card">
-
-            <span class="summary-label">
-                Total Storage
-            </span>
-
-            <span
-                id="totalStorage"
-                class="summary-value"
-            >
-                0 B
-            </span>
-
-        </div>
-
-
-        <div class="summary-card">
-
-            <span class="summary-label">
-                Transfers
-            </span>
-
-            <span
-                id="transferCount"
-                class="summary-value"
-            >
-                0
-            </span>
-
-        </div>
-
-
-        <div class="summary-card">
-
-            <span class="summary-label">
-                Successful
-            </span>
-
-            <span
-                id="successCount"
-                class="summary-value"
-            >
-                0
-            </span>
-
-        </div>
-
-    </section>
-
-
-    <section class="panel">
-
-        <div class="panel-header">
-
-            <div>
-                <h2>
-                    Server Files
-                </h2>
-
-                <p>
-                    Files currently stored on the server
-                </p>
+        <!-- System Architecture & Metric Cards -->
+        <section class="metrics-grid" aria-label="System Metrics">
+            <div class="metric-card">
+                <div class="metric-header">
+                    <span class="metric-label">Server Connection</span>
+                    <span class="metric-icon" aria-hidden="true">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="2" y1="12" x2="22" y2="12"></line>
+                            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                        </svg>
+                    </span>
+                </div>
+                <div class="metric-value-row">
+                    <span id="metricServerStatus" class="metric-value">Connecting...</span>
+                </div>
+                <div class="metric-footer">
+                    <span id="metricServerDetail">127.0.0.1:5000 &bull; TCP Socket</span>
+                </div>
             </div>
 
-        </div>
-
-
-        <div class="table-container">
-
-            <table>
-
-                <thead>
-
-                    <tr>
-                        <th>Filename</th>
-                        <th>Size</th>
-                        <th>SHA-256</th>
-                        <th>Actions</th>
-                    </tr>
-
-                </thead>
-
-
-                <tbody id="filesTableBody">
-
-                    <tr>
-                        <td
-                            colspan="4"
-                            class="loading"
-                        >
-                            Loading files...
-                        </td>
-                    </tr>
-
-                </tbody>
-
-            </table>
-
-        </div>
-
-    </section>
-
-
-    <section class="panel">
-
-        <div class="panel-header">
-
-            <div>
-                <h2>
-                    Transfer History
-                </h2>
-
-                <p>
-                    Upload and download activity
-                </p>
+            <div class="metric-card">
+                <div class="metric-header">
+                    <span class="metric-label">Stored Files</span>
+                    <span class="metric-icon" aria-hidden="true">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                            <polyline points="14 2 14 8 20 8"></polyline>
+                        </svg>
+                    </span>
+                </div>
+                <div class="metric-value-row">
+                    <span id="fileCount" class="metric-value">0</span>
+                    <span class="metric-sublabel">files</span>
+                </div>
+                <div class="metric-footer">
+                    <span>Total Storage: <strong id="totalStorage">0 B</strong></span>
+                </div>
             </div>
 
+            <div class="metric-card">
+                <div class="metric-header">
+                    <span class="metric-label">Completed Transfers</span>
+                    <span class="metric-icon" aria-hidden="true">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="17 1 21 5 17 9"></polyline>
+                            <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
+                            <polyline points="7 23 3 19 7 15"></polyline>
+                            <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
+                        </svg>
+                    </span>
+                </div>
+                <div class="metric-value-row">
+                    <span id="transferCount" class="metric-value">0</span>
+                    <span class="metric-sublabel">logged</span>
+                </div>
+                <div class="metric-footer">
+                    <span>Successful: <strong id="successCount">0</strong> (<span id="successRate">100%</span>)</span>
+                </div>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-header">
+                    <span class="metric-label">Transfer Integrity</span>
+                    <span class="metric-icon" aria-hidden="true">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                            <polyline points="9 12 11 14 15 10"></polyline>
+                        </svg>
+                    </span>
+                </div>
+                <div class="metric-value-row">
+                    <span class="metric-value text-success">SHA-256</span>
+                </div>
+                <div class="metric-footer">
+                    <span>Atomic Commit &bull; Temp Cleaned</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Upload Panel & Transfer Pipeline -->
+        <section class="card upload-card" aria-labelledby="uploadTitle">
+            <div class="card-header">
+                <div>
+                    <h2 id="uploadTitle" class="card-title">Upload File to Server</h2>
+                    <p class="card-subtitle">Transfers via dedicated TCP socket with 4KB chunk streaming and SHA-256 verification</p>
+                </div>
+            </div>
+
+            <div class="upload-content">
+                <div id="dropZone" class="drop-zone" tabindex="0" role="button" aria-label="Select file to upload">
+                    <input type="file" id="fileInput" class="file-input-hidden" aria-hidden="true">
+                    <div class="drop-zone-icon" aria-hidden="true">
+                        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="17 8 12 3 7 8"></polyline>
+                            <line x1="12" y1="3" x2="12" y2="15"></line>
+                        </svg>
+                    </div>
+                    <div class="drop-zone-text">
+                        <p class="drop-prompt"><strong>Click to browse</strong> or drag and drop a file here</p>
+                        <p class="drop-hint">Any file type supported &bull; Processed with per-file locking on the TCP server</p>
+                    </div>
+                </div>
+
+                <div id="fileSelectionPreview" class="file-preview-bar hidden">
+                    <div class="file-preview-info">
+                        <span id="selectedFileExt" class="file-badge">TXT</span>
+                        <div class="file-preview-names">
+                            <span id="selectedFileName" class="file-name-text">filename.txt</span>
+                            <span id="selectedFileSize" class="file-size-text">0 KB</span>
+                        </div>
+                    </div>
+                    <div class="file-preview-actions">
+                        <button id="cancelSelectBtn" class="btn btn-ghost btn-sm" title="Clear selection">Clear</button>
+                        <button id="uploadButton" class="btn btn-primary">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="17 8 12 3 7 8"></polyline>
+                                <line x1="12" y1="3" x2="12" y2="15"></line>
+                            </svg>
+                            <span>Start TCP Upload</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Transfer Stepper / Pipeline Progress -->
+                <div id="transferPipeline" class="transfer-pipeline hidden" aria-live="polite">
+                    <div class="pipeline-progress-bar">
+                        <div id="pipelineProgressFill" class="pipeline-fill" style="width: 0%"></div>
+                    </div>
+                    <div class="pipeline-steps">
+                        <div class="step-item" id="stepHandshake">
+                            <div class="step-dot">1</div>
+                            <span class="step-title">TCP Handshake</span>
+                            <span class="step-desc">HELLO &bull; HELLO_ACK</span>
+                        </div>
+                        <div class="step-item" id="stepMetadata">
+                            <div class="step-dot">2</div>
+                            <span class="step-title">Negotiation</span>
+                            <span class="step-desc">UPLOAD &bull; Lock File</span>
+                        </div>
+                        <div class="step-item" id="stepStreaming">
+                            <div class="step-dot">3</div>
+                            <span class="step-title">Streaming</span>
+                            <span class="step-desc">4096B TCP Chunks</span>
+                        </div>
+                        <div class="step-item" id="stepIntegrity">
+                            <div class="step-dot">4</div>
+                            <span class="step-title">Integrity Check</span>
+                            <span class="step-desc">SHA-256 Compare</span>
+                        </div>
+                        <div class="step-item" id="stepCommit">
+                            <div class="step-dot">5</div>
+                            <span class="step-title">Atomic Commit</span>
+                            <span class="step-desc">os.replace()</span>
+                        </div>
+                    </div>
+                    <div id="uploadStatusText" class="pipeline-status-text">Preparing transfer...</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Server Files Management -->
+        <section class="card" aria-labelledby="filesSectionTitle">
+            <div class="card-header file-header-row">
+                <div>
+                    <h2 id="filesSectionTitle" class="card-title">Server Storage</h2>
+                    <p class="card-subtitle">Files stored on the server &bull; Per-file lock protected</p>
+                </div>
+
+                <div class="table-filters">
+                    <div class="search-box">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                        </svg>
+                        <input type="search" id="fileSearchInput" placeholder="Search files..." aria-label="Search files">
+                    </div>
+
+                    <select id="fileSortSelect" class="filter-select" aria-label="Sort files">
+                        <option value="name-asc">Sort: Name (A &rarr; Z)</option>
+                        <option value="name-desc">Sort: Name (Z &rarr; A)</option>
+                        <option value="size-desc">Sort: Size (Largest)</option>
+                        <option value="size-asc">Sort: Size (Smallest)</option>
+                        <option value="date-desc">Sort: Date (Newest)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="table-container">
+                <table class="data-table" aria-label="Server Files Table">
+                    <thead>
+                        <tr>
+                            <th scope="col" style="width: 32%;">File Name</th>
+                            <th scope="col" style="width: 14%;">Size</th>
+                            <th scope="col" style="width: 38%;">SHA-256 Checksum</th>
+                            <th scope="col" style="width: 16%; text-align: right;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="filesTableBody">
+                        <tr>
+                            <td colspan="4" class="state-cell">
+                                <div class="loading-spinner"></div>
+                                <span>Loading server files...</span>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Transfer History & Protocol Audit Log -->
+        <section class="card" aria-labelledby="historySectionTitle">
+            <div class="card-header file-header-row">
+                <div>
+                    <h2 id="historySectionTitle" class="card-title">Transfer History &amp; Audit Log</h2>
+                    <p class="card-subtitle">Real transfer records logged to server/logs/transfer_history.log</p>
+                </div>
+
+                <div class="table-filters">
+                    <div class="pill-group" role="group" aria-label="Filter transfer operations">
+                        <button class="pill-btn active" data-filter-op="all">All</button>
+                        <button class="pill-btn" data-filter-op="UPLOAD">Uploads</button>
+                        <button class="pill-btn" data-filter-op="DOWNLOAD">Downloads</button>
+                    </div>
+
+                    <div class="search-box">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                        </svg>
+                        <input type="search" id="transferSearchInput" placeholder="Filter history..." aria-label="Filter history">
+                    </div>
+                </div>
+            </div>
+
+            <div class="table-container">
+                <table class="data-table" aria-label="Transfer History Table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Timestamp</th>
+                            <th scope="col">Client</th>
+                            <th scope="col">Operation</th>
+                            <th scope="col">Filename</th>
+                            <th scope="col">Size</th>
+                            <th scope="col">Duration</th>
+                            <th scope="col">Speed</th>
+                            <th scope="col">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="transfersTableBody">
+                        <tr>
+                            <td colspan="8" class="state-cell">
+                                <div class="loading-spinner"></div>
+                                <span>Loading transfer history...</span>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- General Error Banner -->
+        <div id="errorMessage" class="error-banner hidden" role="alert"></div>
+
+    </main>
+
+    <!-- Delete Confirmation Modal (Native <dialog>) -->
+    <dialog id="deleteConfirmDialog" class="confirm-modal">
+        <div class="modal-box">
+            <div class="modal-icon-wrapper" aria-hidden="true">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                    <line x1="12" y1="9" x2="12" y2="13"></line>
+                    <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                </svg>
+            </div>
+            <div class="modal-body">
+                <h3 class="modal-title">Delete File Confirmation</h3>
+                <p class="modal-desc">
+                    Are you sure you want to delete <strong id="deleteTargetFilename">filename</strong>?
+                </p>
+                <p class="modal-subtext">
+                    The server will acquire an exclusive per-file lock to prevent concurrent transfer conflicts and remove the file from storage.
+                </p>
+            </div>
+            <div class="modal-actions">
+                <button id="cancelDeleteBtn" class="btn btn-secondary">Cancel</button>
+                <button id="confirmDeleteBtn" class="btn btn-danger">Confirm Delete</button>
+            </div>
         </div>
+    </dialog>
 
+    <!-- Floating Toast Notification System -->
+    <div id="toastContainer" class="toast-container" aria-live="assertive"></div>
 
-        <div class="table-container">
-
-            <table>
-
-                <thead>
-
-                    <tr>
-                        <th>Timestamp</th>
-                        <th>Client</th>
-                        <th>Operation</th>
-                        <th>Filename</th>
-                        <th>Size</th>
-                        <th>Duration</th>
-                        <th>Speed</th>
-                        <th>Status</th>
-                    </tr>
-
-                </thead>
-
-
-                <tbody id="transfersTableBody">
-
-                    <tr>
-                        <td
-                            colspan="8"
-                            class="loading"
-                        >
-                            Loading transfer history...
-                        </td>
-                    </tr>
-
-                </tbody>
-
-            </table>
-
+    <!-- Footer -->
+    <footer class="app-footer">
+        <div class="footer-content">
+            <p><strong>Reliable Multi-Client File Transfer System</strong> &bull; TCP Socket Communication &bull; Python Sockets &bull; Flask Interface</p>
+            <p class="footer-subtext">Features: Custom Protocol &bull; Length-Prefixed Framing &bull; Per-File Locking &bull; SHA-256 Checksums &bull; Atomic Updates</p>
         </div>
+    </footer>
 
-    </section>
-
-
-    <div
-        id="errorMessage"
-        class="error-message"
-    ></div>
-
-</main>
-
-
-<footer>
-    Reliable Multi-Client File Transfer System
-</footer>
-
-
-<script
-    src="{{ url_for(
-        'static',
-        filename='js/dashboard.js'
-    ) }}"
-></script>
-
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
 </body>
-
 </html>
